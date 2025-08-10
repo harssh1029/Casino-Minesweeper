@@ -121,6 +121,16 @@ function App() {
       if (result.game_over) {
         setCurrentGame(null);
         setMessage(result.message);
+        
+        // Show game over dialog
+        setGameResult({
+          type: 'loss',
+          amount: currentGame.bet_amount,
+          message: `You hit a mine! Lost ${currentGame.bet_amount} points.`,
+          isFreeTrial: currentGame.is_free_trial
+        });
+        setShowGameOverDialog(true);
+        
         await fetchUser();
       } else {
         setCurrentGame(prev => ({
