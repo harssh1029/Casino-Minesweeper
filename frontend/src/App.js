@@ -167,6 +167,16 @@ function App() {
       setCurrentGame(null);
       setMessage(result.message);
       setGameGrid([]);
+      
+      // Show cash out success dialog
+      setGameResult({
+        type: 'win',
+        amount: result.winnings,
+        message: `Congratulations! You earned ${result.winnings} points!`,
+        isFreeTrial: currentGame.is_free_trial
+      });
+      setShowGameOverDialog(true);
+      
       await fetchUser();
     } catch (error) {
       setMessage('Error cashing out');
