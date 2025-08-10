@@ -173,7 +173,7 @@ function App() {
         type: 'win',
         amount: result.winnings,
         message: `Congratulations! You earned ${result.winnings} points!`,
-        isFreeTrial: currentGame.is_free_trial
+        isFreeTrial: currentGame ? currentGame.is_free_trial : false
       });
       setShowGameOverDialog(true);
       
