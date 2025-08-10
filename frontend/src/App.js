@@ -215,6 +215,11 @@ function App() {
     }
   };
 
+  const closeGameOverDialog = () => {
+    setShowGameOverDialog(false);
+    setGameResult(null);
+  };
+
   const getCellClass = (cell) => {
     let baseClass = 'game-cell';
     if (cell.revealed) {
