@@ -12,6 +12,8 @@ function App() {
   const [message, setMessage] = useState('');
   const [showAddPoints, setShowAddPoints] = useState(false);
   const [pointsToAdd, setPointsToAdd] = useState(100);
+  const [showGameOverDialog, setShowGameOverDialog] = useState(false);
+  const [gameResult, setGameResult] = useState(null);
 
   // Initialize user on app start
   useEffect(() => {
