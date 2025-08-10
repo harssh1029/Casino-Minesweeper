@@ -273,7 +273,7 @@ function App() {
                 />
                 <button 
                   className="btn btn-primary"
-                  onClick={startGame}
+                  onClick={() => startGame(false)}
                   disabled={loading || user.points < betAmount}
                 >
                   🎲 Start Paid Game
