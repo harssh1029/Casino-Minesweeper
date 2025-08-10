@@ -254,10 +254,7 @@ function App() {
               {user.free_trials_left > 0 && (
                 <button 
                   className="btn btn-primary free-trial-btn"
-                  onClick={() => {
-                    setBetAmount(0);
-                    startGame();
-                  }}
+                  onClick={() => startGame(true)}
                   disabled={loading}
                 >
                   🎮 Start Free Trial ({user.free_trials_left} left)
