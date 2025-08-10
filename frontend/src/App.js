@@ -24,34 +24,42 @@ function App() {
   const coinSoundRef = useRef(null);
   const bombSoundRef = useRef(null);
   const cashoutSoundRef = useRef(null);
-  const backgroundMusicRef = useRef(null);
 
   // Initialize user on app start
   useEffect(() => {
     initializeUser();
-    
-    // Initialize sounds
-    coinSoundRef.current = new Audio('data:audio/wav;base64,UklGRvIBAABXQVZFZm10IBAAAAABAAEAK2QAAC5tAAACAAEAZGF0YWoCAAC+hYqFbF1fdKivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LdgyMFl2+m7bSoGQUvhNLm5gAA');
-    bombSoundRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAK2QAAC5tAAACAAEAZGF0YQ==');
-    cashoutSoundRef.current = new Audio('data:audio/wav;base64,UklGRtIBAABXQVZFZm10IBAAAAABAAEAK2QAAC5tAAACAAEAZGF0YW4CAADpAQAA6QEAAOkBAADpAQAA');
-    
-    // Set volume levels
-    if (coinSoundRef.current) coinSoundRef.current.volume = 0.3;
-    if (bombSoundRef.current) bombSoundRef.current.volume = 0.4;
-    if (cashoutSoundRef.current) cashoutSoundRef.current.volume = 0.5;
-    
-    return () => {
-      // Cleanup audio
-      if (backgroundMusicRef.current) {
-        backgroundMusicRef.current.pause();
-      }
-    };
   }, []);
 
-  const playSound = (soundRef) => {
-    if (soundRef && soundRef.current) {
-      soundRef.current.currentTime = 0;
-      soundRef.current.play().catch(e => console.log('Sound play failed:', e));
+  const initializeSounds = () => {
+    // Create coin sound (high pitch ding)
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const createCoinSound = () => {
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.1);
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+    };
+    
+    coinSoundRef.current = createCoinSound;
+  };
+
+  const playSound = (type) => {
+    try {
+      if (type === 'coin' && coinSoundRef.current) {
+        coinSoundRef.current();
+      }
+    } catch (e) {
+      console.log('Sound play failed:', e);
     }
   };
 
@@ -63,11 +71,22 @@ function App() {
       });
       const userData = await response.json();
       setUser(userData);
-      setMessage('Welcome to Casino Minesweeper! You have 3 free trials.');
+      setMessage('🎰 Welcome to Casino Minesweeper! You have 3 free trials.');
+      
+      // Initialize sounds after user interaction
+      setTimeout(() => {
+        initializeSounds();
+      }, 1000);
     } catch (error) {
       setMessage('Error initializing user');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateUserData = (newUserData) => {
+    if (newUserData) {
+      setUser(newUserData);
     }
   };
 
@@ -88,7 +107,7 @@ function App() {
     const actualBetAmount = isFreeTrial ? 0 : betAmount;
     
     if (!isFreeTrial && user.points < betAmount) {
-      setMessage('Insufficient points! Please add more points.');
+      setMessage('❌ Insufficient points! Please add more points.');
       setShowAddPoints(true);
       return;
     }
@@ -110,16 +129,20 @@ function App() {
       const gameData = await response.json();
       setCurrentGame(gameData);
       
+      // Update user data from response
+      if (gameData.user_data) {
+        updateUserData(gameData.user_data);
+      }
+      
       // Initialize empty grid for display
       const grid = Array(5).fill().map(() => Array(5).fill({ revealed: false, isMine: false }));
       setGameGrid(grid);
       
-      await fetchUser(); // Refresh user data
       setMessage(isFreeTrial ? 
-        `Free trial started! ${mineCount} mines, +${gameData.multiplier_per_click}% per safe click!` : 
-        `Game started! ${mineCount} mines, +${gameData.multiplier_per_click}% per safe click!`);
+        `🎮 Free trial started! ${mineCount} mines, +${gameData.multiplier_per_click}% per safe click!` : 
+        `🎯 Game started! ${mineCount} mines, +${gameData.multiplier_per_click}% per safe click!`);
     } catch (error) {
-      setMessage('Error starting game');
+      setMessage('❌ Error starting game');
     } finally {
       setLoading(false);
     }
@@ -160,7 +183,7 @@ function App() {
       const cellKey = `${row}-${col}`;
       setAnimatingCells(prev => new Set([...prev, cellKey]));
       
-      // Remove animation after 1 second
+      // Remove animation after duration
       setTimeout(() => {
         setAnimatingCells(prev => {
           const newSet = new Set(prev);
@@ -177,16 +200,13 @@ function App() {
         setCurrentGame(null);
         setMessage(result.message);
         
-        // Play bomb sound
-        playSound(bombSoundRef);
-        
         // Show game over dialog
         setGameResult({
           type: 'loss',
           amount: betAmount,
           message: isFreeTrial ? 
-            `You hit a mine! No points lost (free trial).` :
-            `You hit a mine! Lost ${betAmount} points.`,
+            `💥 You hit a mine! No points lost (free trial).` :
+            `💥 You hit a mine! Lost ₹${betAmount}.`,
           isFreeTrial: isFreeTrial
         });
         setShowGameOverDialog(true);
@@ -194,7 +214,7 @@ function App() {
         await fetchUser();
       } else {
         // Play coin sound for safe click
-        playSound(coinSoundRef);
+        playSound('coin');
         
         setCurrentGame(prev => ({
           ...prev,
@@ -205,7 +225,7 @@ function App() {
         setMessage(result.message);
       }
     } catch (error) {
-      setMessage('Error processing click');
+      setMessage('❌ Error processing click');
     } finally {
       setLoading(false);
     }
@@ -231,21 +251,22 @@ function App() {
       setMessage(result.message);
       setGameGrid([]);
       
-      // Play cashout sound
-      playSound(cashoutSoundRef);
+      // Update user data from response
+      if (result.user_data) {
+        updateUserData(result.user_data);
+      }
       
       // Show cash out success dialog
       setGameResult({
         type: 'win',
         amount: result.winnings,
-        message: `Congratulations! You earned ${result.winnings} points (₹${result.winnings})!`,
+        message: `🎉 Congratulations! You earned ₹${result.winnings}!`,
         isFreeTrial: currentGame ? currentGame.is_free_trial : false
       });
       setShowGameOverDialog(true);
       
-      await fetchUser();
     } catch (error) {
-      setMessage('Error cashing out');
+      setMessage('❌ Error cashing out');
     } finally {
       setLoading(false);
     }
@@ -253,6 +274,11 @@ function App() {
 
   const handleWalletAction = async () => {
     if (!user) return;
+    
+    if (walletAmount < 10) {
+      setMessage('❌ Minimum ₹10 required');
+      return;
+    }
     
     try {
       setLoading(true);
@@ -269,11 +295,16 @@ function App() {
       });
 
       const result = await response.json();
-      await fetchUser();
+      
+      // Update user data from response
+      if (result.user_data) {
+        updateUserData(result.user_data);
+      }
+      
       setMessage(result.message);
       setShowWallet(false);
     } catch (error) {
-      setMessage(`Error ${walletAction}ing money`);
+      setMessage(`❌ Error ${walletAction}ing money`);
     } finally {
       setLoading(false);
     }
@@ -281,7 +312,7 @@ function App() {
 
   const addPoints = async () => {
     if (!user || pointsToAdd < 100) {
-      setMessage('Minimum 100 points required');
+      setMessage('❌ Minimum 100 points required');
       return;
     }
 
@@ -299,11 +330,16 @@ function App() {
       });
 
       const result = await response.json();
-      await fetchUser();
+      
+      // Update user data from response
+      if (result.user_data) {
+        updateUserData(result.user_data);
+      }
+      
       setMessage(result.message);
       setShowAddPoints(false);
     } catch (error) {
-      setMessage('Error adding points');
+      setMessage('❌ Error adding points');
     } finally {
       setLoading(false);
     }
@@ -325,7 +361,7 @@ function App() {
       }
     }
     if (animatingCells.has(cellKey)) {
-      baseClass += cell.isMine ? ' mine-explosion' : ' coin-flip';
+      baseClass += cell.isMine ? ' mine-explosion' : ' coin-reveal';
     }
     return baseClass;
   };
@@ -337,9 +373,12 @@ function App() {
     return '';
   };
 
-  const getMultiplierPercentage = () => {
-    if (!mineCount) return 0;
-    return Math.round(25 / mineCount * 10) / 10;
+  const getMinePercentage = (mines) => {
+    const percentages = {
+      1: 5, 2: 8, 3: 12, 4: 15,
+      5: 18, 6: 22, 7: 25, 8: 30
+    };
+    return percentages[mines] || 12;
   };
 
   if (!user) {
@@ -347,7 +386,7 @@ function App() {
       <div className="app casino-theme">
         <div className="loading-screen">
           <div className="casino-loading">
-            <div className="roulette-spinner"></div>
+            <div className="loading-spinner"></div>
             <h2>🎰 Loading Casino...</h2>
           </div>
         </div>
@@ -360,7 +399,6 @@ function App() {
       <header className="casino-header">
         <div className="casino-logo">
           <h1>🎰 CASINO MINESWEEPER</h1>
-          <div className="neon-glow"></div>
         </div>
         <div className="user-stats">
           <div className="stat-card">
@@ -390,7 +428,6 @@ function App() {
       <main className="app-main">
         {message && (
           <div className="casino-message">
-            <div className="message-glow"></div>
             {message}
           </div>
         )}
@@ -398,10 +435,10 @@ function App() {
         {!currentGame ? (
           <div className="casino-setup">
             <div className="game-setup-card">
-              <h3>🎲 Start New Game</h3>
+              <h3>🎲 Configure Your Game</h3>
               
               <div className="mine-selector">
-                <label>Number of Mines (Higher = More Risk & Reward):</label>
+                <label>Choose Risk Level (More Mines = Higher Rewards):</label>
                 <div className="mine-options">
                   {[1, 2, 3, 4, 5, 6, 7, 8].map(count => (
                     <button
@@ -409,117 +446,120 @@ function App() {
                       className={`mine-option ${mineCount === count ? 'selected' : ''}`}
                       onClick={() => setMineCount(count)}
                     >
-                      <span className="mine-count">{count}</span>
-                      <span className="mine-bonus">+{getMultiplierPercentage()}%</span>
+                      <span className="mine-count">{count}💣</span>
+                      <span className="mine-bonus">+{getMinePercentage(count)}%</span>
                     </button>
                   ))}
                 </div>
               </div>
               
-              {user.free_trials_left > 0 && (
-                <button 
-                  className="btn btn-primary free-trial-btn neon-button"
-                  onClick={() => startGame(true)}
-                  disabled={loading}
-                >
-                  🎮 Start Free Trial ({user.free_trials_left} left)
-                </button>
-              )}
+              <div className="game-controls">
+                {user.free_trials_left > 0 && (
+                  <button 
+                    className="btn btn-primary free-trial-btn"
+                    onClick={() => startGame(true)}
+                    disabled={loading}
+                  >
+                    🎮 Free Trial ({user.free_trials_left} left)
+                  </button>
+                )}
 
-              <div className="bet-controls">
-                <label>Bet Amount (Points):</label>
-                <input
-                  type="number"
-                  value={betAmount}
-                  onChange={(e) => setBetAmount(Number(e.target.value))}
-                  min="1"
-                  max={user.points}
-                  disabled={loading}
-                  className="casino-input"
-                />
-                <button 
-                  className="btn btn-primary neon-button"
-                  onClick={() => startGame(false)}
-                  disabled={loading || user.points < betAmount}
-                >
-                  🎲 Start Paid Game
-                </button>
+                <div className="bet-section">
+                  <label>Bet Amount:</label>
+                  <input
+                    type="number"
+                    value={betAmount}
+                    onChange={(e) => setBetAmount(Number(e.target.value))}
+                    min="1"
+                    max={user.points}
+                    disabled={loading}
+                    className="bet-input"
+                  />
+                  <button 
+                    className="btn btn-primary play-btn"
+                    onClick={() => startGame(false)}
+                    disabled={loading || user.points < betAmount}
+                  >
+                    🎲 Play Now (₹{betAmount})
+                  </button>
+                </div>
               </div>
             </div>
 
             <div className="casino-actions">
               <button 
-                className="btn btn-secondary casino-btn"
+                className="btn btn-secondary action-btn"
                 onClick={() => setShowAddPoints(true)}
               >
                 🪙 Buy Points
               </button>
               <button 
-                className="btn btn-secondary casino-btn"
+                className="btn btn-secondary action-btn"
                 onClick={() => setShowWallet(true)}
               >
-                💰 Wallet
+                💰 Manage Wallet
               </button>
             </div>
 
             <div className="game-info-card">
-              <h4>🎯 How to Play:</h4>
+              <h4>🎯 Game Rules:</h4>
               <ul>
-                <li>🎯 Choose number of mines (more mines = higher rewards)</li>
-                <li>💰 Each safe click increases winnings by the bonus %</li>
-                <li>🏦 Cash out anytime to secure winnings</li>
-                <li>💣 Hit a mine = lose everything!</li>
-                <li>🎮 First 3 games are free trials</li>
+                <li>🎯 Select mine count: More mines = Higher risk but bigger rewards per safe click</li>
+                <li>💰 Each safe click multiplies your bet by the percentage shown</li>
+                <li>🏦 Cash out anytime to keep your winnings</li>
+                <li>💣 Hit a mine and lose your entire bet!</li>
+                <li>🎮 3 free practice rounds to get started</li>
               </ul>
             </div>
           </div>
         ) : (
           <div className="casino-game-area">
-            <div className="casino-game-stats">
-              <div className="stat-display">
-                <span className="stat-label">Bet:</span>
+            <div className="game-stats-panel">
+              <div className="stat-item">
+                <span className="stat-label">Bet</span>
                 <span className="stat-value gold">₹{currentGame.bet_amount}</span>
               </div>
-              <div className="stat-display">
-                <span className="stat-label">Mines:</span>
+              <div className="stat-item">
+                <span className="stat-label">Mines</span>
                 <span className="stat-value danger">{currentGame.mine_count}💣</span>
               </div>
-              <div className="stat-display">
-                <span className="stat-label">Multiplier:</span>
+              <div className="stat-item">
+                <span className="stat-label">Multiplier</span>
                 <span className="stat-value success">{currentGame.current_multiplier?.toFixed(2)}x</span>
               </div>
-              <div className="stat-display">
-                <span className="stat-label">Winnings:</span>
+              <div className="stat-item">
+                <span className="stat-label">Current Win</span>
                 <span className="stat-value highlight">₹{currentGame.current_winnings}</span>
               </div>
             </div>
 
-            <div className="casino-grid">
-              <div className="grid-glow"></div>
-              {Array(5).fill().map((_, row) => (
-                <div key={row} className="grid-row">
-                  {Array(5).fill().map((_, col) => {
-                    const cell = gameGrid[row] && gameGrid[row][col] ? gameGrid[row][col] : { revealed: false };
-                    return (
-                      <button
-                        key={`${row}-${col}`}
-                        className={getCellClass(cell, row, col)}
-                        onClick={() => clickCell(row, col)}
-                        disabled={loading || cell.revealed}
-                      >
-                        <div className="cell-content">
-                          {getCellContent(cell)}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
+            <div className="casino-grid-container">
+              <div className="casino-grid">
+                {Array(5).fill().map((_, row) => (
+                  <div key={row} className="grid-row">
+                    {Array(5).fill().map((_, col) => {
+                      const cell = gameGrid[row] && gameGrid[row][col] ? gameGrid[row][col] : { revealed: false };
+                      return (
+                        <button
+                          key={`${row}-${col}`}
+                          className={getCellClass(cell, row, col)}
+                          onClick={() => clickCell(row, col)}
+                          disabled={loading || cell.revealed}
+                        >
+                          <div className="cell-content">
+                            {getCellContent(cell)}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="casino-actions">
+            <div className="game-action-panel">
               <button 
-                className="btn btn-success cashout-btn neon-button pulse"
+                className="btn btn-success cashout-btn"
                 onClick={cashOut}
                 disabled={loading || currentGame.safe_clicks === 0}
               >
@@ -532,15 +572,16 @@ function App() {
         {/* Game Over Dialog */}
         {showGameOverDialog && gameResult && (
           <div className="modal-overlay">
-            <div className="casino-modal">
-              <div className="result-explosion">
+            <div className="game-result-modal">
+              <div className="result-header">
                 <div className="result-icon">
                   {gameResult.type === 'win' ? '🎉' : '💥'}
                 </div>
+                <h3 className={gameResult.type === 'win' ? 'win-title' : 'lose-title'}>
+                  {gameResult.type === 'win' ? 'BIG WIN!' : 'GAME OVER!'}
+                </h3>
               </div>
-              <h3 className={gameResult.type === 'win' ? 'win-title' : 'lose-title'}>
-                {gameResult.type === 'win' ? '🏆 BIG WIN!' : '💥 GAME OVER!'}
-              </h3>
+              
               <div className="result-amount">
                 {gameResult.type === 'win' ? (
                   <span className="win-amount">+₹{gameResult.amount}</span>
@@ -548,12 +589,15 @@ function App() {
                   <span className="loss-amount">-₹{gameResult.amount}</span>
                 )}
               </div>
+              
               <p className="result-message">{gameResult.message}</p>
+              
               {gameResult.isFreeTrial && (
-                <p className="trial-note">🎮 This was a free trial!</p>
+                <p className="trial-note">🎮 This was a free trial - no real money affected!</p>
               )}
+              
               <button 
-                className="btn btn-primary neon-button"
+                className="btn btn-primary continue-btn"
                 onClick={closeGameOverDialog}
               >
                 Continue Playing
@@ -565,47 +609,49 @@ function App() {
         {/* Wallet Modal */}
         {showWallet && (
           <div className="modal-overlay">
-            <div className="casino-modal">
+            <div className="wallet-modal">
               <h3>💰 Wallet Management</h3>
-              <div className="wallet-balance">
-                Current Balance: <span className="highlight">₹{user.wallet_balance?.toFixed(2) || '0.00'}</span>
+              
+              <div className="current-balance">
+                Balance: <span className="balance-amount">₹{user.wallet_balance?.toFixed(2) || '0.00'}</span>
               </div>
               
-              <div className="wallet-actions">
-                <div className="action-selector">
+              <div className="wallet-controls">
+                <div className="action-tabs">
                   <button
-                    className={`btn ${walletAction === 'deposit' ? 'btn-primary' : 'btn-secondary'}`}
+                    className={`tab-btn ${walletAction === 'deposit' ? 'active' : ''}`}
                     onClick={() => setWalletAction('deposit')}
                   >
                     Deposit
                   </button>
                   <button
-                    className={`btn ${walletAction === 'withdraw' ? 'btn-primary' : 'btn-secondary'}`}
+                    className={`tab-btn ${walletAction === 'withdraw' ? 'active' : ''}`}
                     onClick={() => setWalletAction('withdraw')}
                   >
                     Withdraw
                   </button>
                 </div>
                 
-                <div className="amount-input">
-                  <label>{walletAction === 'deposit' ? 'Deposit Amount:' : 'Withdraw Amount:'}</label>
+                <div className="amount-section">
+                  <label>{walletAction === 'deposit' ? 'Add Money:' : 'Withdraw Amount:'}</label>
                   <input
                     type="number"
                     value={walletAmount}
                     onChange={(e) => setWalletAmount(Number(e.target.value))}
                     min="10"
                     step="10"
-                    className="casino-input"
+                    className="wallet-input"
+                    placeholder="Min ₹10"
                   />
                 </div>
                 
-                <div className="modal-actions">
+                <div className="wallet-actions">
                   <button 
-                    className="btn btn-primary neon-button"
+                    className="btn btn-primary wallet-action-btn"
                     onClick={handleWalletAction}
                     disabled={loading || walletAmount < 10}
                   >
-                    💳 {walletAction === 'deposit' ? 'Add Money' : 'Withdraw Money'}
+                    💳 {walletAction === 'deposit' ? 'Add Money' : 'Withdraw'} ₹{walletAmount}
                   </button>
                   <button 
                     className="btn btn-secondary"
@@ -622,26 +668,33 @@ function App() {
         {/* Add Points Modal */}
         {showAddPoints && (
           <div className="modal-overlay">
-            <div className="casino-modal">
+            <div className="points-modal">
               <h3>🪙 Buy Game Points</h3>
-              <p>1 Point = ₹1</p>
-              <div className="add-points-form">
-                <label>Points to Buy (Min 100):</label>
+              <p className="exchange-rate">Exchange Rate: 1 Point = ₹1</p>
+              
+              <div className="points-form">
+                <label>Points to Purchase:</label>
                 <input
                   type="number"
                   value={pointsToAdd}
                   onChange={(e) => setPointsToAdd(Number(e.target.value))}
                   min="100"
                   step="50"
-                  className="casino-input"
+                  className="points-input"
+                  placeholder="Minimum 100 points"
                 />
-                <div className="modal-actions">
+                
+                <div className="cost-display">
+                  Total Cost: <span className="cost-amount">₹{pointsToAdd}</span>
+                </div>
+                
+                <div className="points-actions">
                   <button 
-                    className="btn btn-primary neon-button"
+                    className="btn btn-primary buy-btn"
                     onClick={addPoints}
                     disabled={loading || pointsToAdd < 100}
                   >
-                    💳 Buy {pointsToAdd} Points (₹{pointsToAdd})
+                    💳 Purchase {pointsToAdd} Points
                   </button>
                   <button 
                     className="btn btn-secondary"
@@ -657,8 +710,7 @@ function App() {
       </main>
 
       <footer className="casino-footer">
-        <div className="footer-glow"></div>
-        <p>🎮 Games: {user.total_games} | 🏆 Total Winnings: ₹{user.total_winnings} | 💰 Wallet: ₹{user.wallet_balance?.toFixed(2) || '0.00'}</p>
+        <p>🎮 Games: {user.total_games} | 🏆 Winnings: ₹{user.total_winnings} | 💰 Wallet: ₹{user.wallet_balance?.toFixed(2) || '0.00'}</p>
       </footer>
     </div>
   );

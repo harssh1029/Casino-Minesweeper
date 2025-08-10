@@ -28,11 +28,23 @@ db = client.minesweeper_db
 users_collection = db.users
 games_collection = db.games
 
+# Mine percentage mapping
+MINE_PERCENTAGES = {
+    1: 5.0,   # 1 mine = 5%
+    2: 8.0,   # 2 mines = 8%
+    3: 12.0,  # 3 mines = 12%
+    4: 15.0,  # 4 mines = 15%
+    5: 18.0,  # 5 mines = 18%
+    6: 22.0,  # 6 mines = 22%
+    7: 25.0,  # 7 mines = 25%
+    8: 30.0   # 8 mines = 30%
+}
+
 # Pydantic models
 class User(BaseModel):
     user_id: str
     points: int = 1000  # Start with 1000 points for demo
-    wallet_balance: float = 0.0  # Real money wallet
+    wallet_balance: float = 100.0  # Real money wallet
     free_trials_left: int = 3
     total_games: int = 0
     total_winnings: int = 0
@@ -94,9 +106,9 @@ def generate_mines(grid_size=5, mine_count=3):
     
     return mines
 
-def calculate_multiplier_per_click(total_cells=25, mine_count=3):
-    """Calculate multiplier per click based on mine count"""
-    return total_cells / mine_count / 100.0  # Convert to percentage
+def get_multiplier_per_click(mine_count):
+    """Get multiplier percentage based on mine count"""
+    return MINE_PERCENTAGES.get(mine_count, 12.0) / 100.0  # Convert to decimal
 
 def calculate_multiplier(safe_clicks, multiplier_per_click):
     """Calculate current multiplier based on safe clicks"""
@@ -133,7 +145,7 @@ async def get_user(user_id: str):
 
 @app.post("/api/add-points")
 async def add_points(request: AddPoints):
-    """Dummy add points functionality"""
+    """Add points to user account"""
     user = users_collection.find_one({"user_id": request.user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -143,12 +155,22 @@ async def add_points(request: AddPoints):
         raise HTTPException(status_code=400, detail="Minimum 100 points required")
     
     new_points = user["points"] + request.points
+    
+    # Update points in database
     users_collection.update_one(
         {"user_id": request.user_id},
         {"$set": {"points": new_points}}
     )
     
-    return {"message": f"Added {request.points} points successfully", "total_points": new_points}
+    # Get updated user data
+    updated_user = users_collection.find_one({"user_id": request.user_id})
+    updated_user.pop('_id', None)
+    
+    return {
+        "message": f"Added {request.points} points successfully", 
+        "total_points": new_points,
+        "user_data": updated_user
+    }
 
 @app.post("/api/wallet/deposit")
 async def wallet_deposit(request: WalletDeposit):
@@ -160,13 +182,24 @@ async def wallet_deposit(request: WalletDeposit):
     if request.amount < 10.0:
         raise HTTPException(status_code=400, detail="Minimum ₹10 deposit required")
     
-    new_balance = user.get("wallet_balance", 0.0) + request.amount
+    current_balance = user.get("wallet_balance", 0.0)
+    new_balance = current_balance + request.amount
+    
+    # Update wallet balance in database
     users_collection.update_one(
         {"user_id": request.user_id},
         {"$set": {"wallet_balance": new_balance}}
     )
     
-    return {"message": f"Added ₹{request.amount} to wallet", "wallet_balance": new_balance}
+    # Get updated user data
+    updated_user = users_collection.find_one({"user_id": request.user_id})
+    updated_user.pop('_id', None)
+    
+    return {
+        "message": f"Added ₹{request.amount} to wallet", 
+        "wallet_balance": new_balance,
+        "user_data": updated_user
+    }
 
 @app.post("/api/wallet/withdraw")
 async def wallet_withdraw(request: WalletWithdraw):
@@ -183,12 +216,22 @@ async def wallet_withdraw(request: WalletWithdraw):
         raise HTTPException(status_code=400, detail="Minimum ₹10 withdrawal required")
     
     new_balance = current_balance - request.amount
+    
+    # Update wallet balance in database
     users_collection.update_one(
         {"user_id": request.user_id},
         {"$set": {"wallet_balance": new_balance}}
     )
     
-    return {"message": f"Withdrawn ₹{request.amount} from wallet", "wallet_balance": new_balance}
+    # Get updated user data
+    updated_user = users_collection.find_one({"user_id": request.user_id})
+    updated_user.pop('_id', None)
+    
+    return {
+        "message": f"Withdrawn ₹{request.amount} from wallet", 
+        "wallet_balance": new_balance,
+        "user_data": updated_user
+    }
 
 @app.post("/api/start-game")
 async def start_game(request: GameStart):
@@ -197,9 +240,9 @@ async def start_game(request: GameStart):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Validate mine count (1-10 mines allowed)
-    if request.mine_count < 1 or request.mine_count > 10:
-        raise HTTPException(status_code=400, detail="Mine count must be between 1 and 10")
+    # Validate mine count (1-8 mines allowed)
+    if request.mine_count < 1 or request.mine_count > 8:
+        raise HTTPException(status_code=400, detail="Mine count must be between 1 and 8")
     
     is_free_trial = user["free_trials_left"] > 0 and request.bet_amount == 0
     
@@ -220,8 +263,8 @@ async def start_game(request: GameStart):
             {"$inc": {"free_trials_left": -1}}
         )
     
-    # Calculate multiplier per click based on mine count
-    multiplier_per_click = calculate_multiplier_per_click(25, request.mine_count)
+    # Get multiplier per click based on mine count
+    multiplier_per_click = get_multiplier_per_click(request.mine_count)
     
     # Create new game
     game_id = str(uuid.uuid4())
@@ -252,14 +295,19 @@ async def start_game(request: GameStart):
         {"$inc": {"total_games": 1}}
     )
     
+    # Get updated user data
+    updated_user = users_collection.find_one({"user_id": request.user_id})
+    updated_user.pop('_id', None)
+    
     return {
         "game_id": game_id,
         "is_free_trial": is_free_trial,
         "bet_amount": request.bet_amount,
         "mine_count": request.mine_count,
-        "multiplier_per_click": round(multiplier_per_click * 100, 1),  # Convert to percentage
+        "multiplier_per_click": MINE_PERCENTAGES.get(request.mine_count, 12.0),  # Return as percentage
         "current_winnings": request.bet_amount if not is_free_trial else 0,
-        "grid_size": 5
+        "grid_size": 5,
+        "user_data": updated_user
     }
 
 @app.post("/api/click-cell")
@@ -294,7 +342,7 @@ async def click_cell(request: GameAction):
             "result": "mine_hit",
             "game_over": True,
             "winnings": 0,
-            "message": "You hit a mine! Game over."
+            "message": "💥 You hit a mine! Game over!"
         }
     else:
         # Safe click - increase multiplier
@@ -313,14 +361,16 @@ async def click_cell(request: GameAction):
             }
         )
         
+        multiplier_percentage = game["multiplier_per_click"] * 100
+        
         return {
             "result": "safe",
             "game_over": False,
             "safe_clicks": new_safe_clicks,
             "current_multiplier": round(new_multiplier, 2),
             "current_winnings": new_winnings,
-            "multiplier_increase": round(game["multiplier_per_click"] * 100, 1),  # For frontend display
-            "message": f"Safe! +{round(game['multiplier_per_click'] * 100, 1)}% bonus!"
+            "multiplier_increase": round(multiplier_percentage, 1),
+            "message": f"💰 Safe! +{round(multiplier_percentage, 1)}% bonus!"
         }
 
 @app.post("/api/cash-out")
@@ -343,27 +393,27 @@ async def cash_out(request: CashOut):
     
     # Add winnings to user points and wallet (only for paid games)
     if not game["is_free_trial"] and winnings > 0:
-        # Add to points
+        # Add to points and wallet
         users_collection.update_one(
             {"user_id": game["user_id"]},
             {
                 "$inc": {
                     "points": winnings,
-                    "total_winnings": winnings
+                    "total_winnings": winnings,
+                    "wallet_balance": float(winnings)  # Add to wallet as well
                 }
             }
         )
-        
-        # Add to wallet (convert points to rupees 1:1)
-        users_collection.update_one(
-            {"user_id": game["user_id"]},
-            {"$inc": {"wallet_balance": float(winnings)}}
-        )
+    
+    # Get updated user data
+    updated_user = users_collection.find_one({"user_id": game["user_id"]})
+    updated_user.pop('_id', None)
     
     return {
         "result": "cashed_out",
         "winnings": winnings,
-        "message": f"Successfully cashed out {winnings} points (₹{winnings})!"
+        "message": f"🎉 Successfully cashed out ₹{winnings}!",
+        "user_data": updated_user
     }
 
 @app.get("/api/game/{game_id}")
