@@ -45,10 +45,10 @@ function App() {
     }
   };
 
-  const startGame = async () => {
+  const startGame = async (isFreeTrial = false) => {
     if (!user) return;
     
-    const isFreeTrial = user.free_trials_left > 0 && betAmount === 0;
+    const actualBetAmount = isFreeTrial ? 0 : betAmount;
     
     if (!isFreeTrial && user.points < betAmount) {
       setMessage('Insufficient points! Please add more points.');
@@ -65,7 +65,7 @@ function App() {
         },
         body: JSON.stringify({
           user_id: user.user_id,
-          bet_amount: isFreeTrial ? 0 : betAmount,
+          bet_amount: actualBetAmount,
         }),
       });
 
