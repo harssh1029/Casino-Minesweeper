@@ -375,6 +375,36 @@ function App() {
           </div>
         )}
 
+        {showGameOverDialog && gameResult && (
+          <div className="modal-overlay">
+            <div className="game-over-modal">
+              <div className="game-result-icon">
+                {gameResult.type === 'win' ? '🎉' : '💥'}
+              </div>
+              <h3>{gameResult.type === 'win' ? 'Congratulations!' : 'Game Over!'}</h3>
+              <div className="result-amount">
+                {gameResult.type === 'win' ? (
+                  <span className="win-amount">+{gameResult.amount} points</span>
+                ) : (
+                  <span className="loss-amount">-{gameResult.amount} points</span>
+                )}
+              </div>
+              <p className="result-message">{gameResult.message}</p>
+              {gameResult.isFreeTrial && (
+                <p className="trial-note">This was a free trial - no points affected!</p>
+              )}
+              <div className="modal-actions">
+                <button 
+                  className="btn btn-primary"
+                  onClick={closeGameOverDialog}
+                >
+                  Continue Playing
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showAddPoints && (
           <div className="modal-overlay">
             <div className="modal">
