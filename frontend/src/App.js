@@ -119,15 +119,21 @@ function App() {
       setGameGrid(newGrid);
 
       if (result.game_over) {
+        // Store game info before clearing
+        const betAmount = currentGame.bet_amount || 0;
+        const isFreeTrial = currentGame.is_free_trial || false;
+        
         setCurrentGame(null);
         setMessage(result.message);
         
         // Show game over dialog
         setGameResult({
           type: 'loss',
-          amount: currentGame.bet_amount,
-          message: `You hit a mine! Lost ${currentGame.bet_amount} points.`,
-          isFreeTrial: currentGame.is_free_trial
+          amount: betAmount,
+          message: isFreeTrial ? 
+            `You hit a mine! No points lost (free trial).` :
+            `You hit a mine! Lost ${betAmount} points.`,
+          isFreeTrial: isFreeTrial
         });
         setShowGameOverDialog(true);
         
