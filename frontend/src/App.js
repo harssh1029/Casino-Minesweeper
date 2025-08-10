@@ -235,7 +235,7 @@ function App() {
   const getCellContent = (cell) => {
     if (!cell.revealed) return '';
     if (cell.isMine) return '💣';
-    if (cell.isSafe) return '💎';
+    if (cell.isSafe) return '💰'; // Changed from 💎 to 💰
     return '';
   };
 
